@@ -1,0 +1,17 @@
+country,population_m,emissions_cap,gdp_cap,headline_price,actor_idx,actor_group,notes
+China,1410,10.81,13303.1,11,1,CHINA,National ETS $11.56. ~100% free alloc. Expanding to cement/steel/aluminium.
+United States,340.1,17.34,84534,0,2,US,"No federal. CA $28, RGGI $20, WA $61. Paris withdrawal Jan 2025."
+European Union,450.2,7.14,43305,78,3,EU,EU ETS; up to 57% AUCTIONED (43% free allocated); covers ~40% of EU GHG emissions.
+India,1450,3.04,2694.7,0,4,INDIA,No carbon price. CCTS expected mid-2026. Coal cess removed 2025.
+Russia,143.5,18.02,14889,0,5,RUSSIA,No carbon pricing. Oil/gas ~20-25% of state budget.
+Indonesia,283.5,4.69,4925.4,1,6,INDONESIA,"ETS $0.72, power sector only. OECD Net ECR = −€4.98."
+United Kingdom,69.2,5.63,53246.4,50,7,Adv. joiners,UK ETS $54.83. CPS £18 until Apr 2028. OECD explicit €15.63.
+Japan,124,8.52,32487.1,2,7,Adv. joiners,Carbon tax ¥289. GX-ETS 700+ companies. GX-Surcharge from 2028.
+Canada,41.3,19.76,54340.3,63,7,Adv. joiners,OBPS C$95. Consumer fuel charge removed Apr 2025.
+Australia,27.2,22.26,64604,23,7,Adv. joiners,Safeguard Mechanism. 4.9%/yr baseline decline. OECD explicit €4.1.
+South Korea,51.8,12.83,36238.6,9,7,Adv. joiners,K-ETS 77.75% coverage. Phase 3 <90% free. Effective ~€0.70.
+Nigeria,232.7,1.54,1084.2,0,8,Low-carbon,"Proposed carbon tax €6 — UNRELIABLE, not used. α_base = €0. Fuel subsidies ~3% of GDP."
+Bangladesh,173.6,1.25,2593.4,0,8,Low-carbon,No carbon price. No fuel excise. Subsidies cover 20.5% of emissions.
+Ethiopia,132,1.56,1133.9,0,8,Low-carbon,No carbon pricing. Hydropower-dominant electricity.
+Saudi Arabia,35.3,22.79,35121.7,0,9,Hydro. rentiers,No carbon price. Fossil fuels ~100% of energy. Net-zero 2060.
+UAE,10.99,25.62,50273.5,0,9,Hydro. rentiers,No carbon price. Net-zero 2050. COP28 host.

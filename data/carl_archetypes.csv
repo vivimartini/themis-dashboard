@@ -1,0 +1,202 @@
+iso3,country_name,archetype,std_vat,gas_vat,notes
+USA,United States,A3,0.00,0.00,no federal VAT; state sales taxes omitted
+AUS,Australia,A2,0.10,0.10,
+CAN,Canada,A2,0.05,0.05,federal GST only; provincial omitted for simplicity
+KAZ,Kazakhstan,A5,0.12,0.12,oil/gas exporter; reassigned from A1
+NZL,New Zealand,A2,0.15,0.15,
+AUT,Austria,A1,0.20,0.20,
+BEL,Belgium,A1,0.21,0.21,
+BGR,Bulgaria,A1,0.20,0.20,
+HRV,Croatia,A1,0.25,0.25,
+CYP,Cyprus,A1,0.19,0.19,
+CZE,Czech Republic,A1,0.21,0.21,
+DNK,Denmark,A1,0.25,0.25,
+EST,Estonia,A1,0.20,0.20,
+FIN,Finland,A1,0.24,0.24,
+FRA,France,A1,0.20,0.20,
+DEU,Germany,A1,0.19,0.19,
+GRC,Greece,A1,0.24,0.24,
+HUN,Hungary,A1,0.27,0.27,
+IRL,Ireland,A1,0.23,0.135,reduced rate on gas
+ITA,Italy,A1,0.22,0.10,reduced rate on gas/heating
+LVA,Latvia,A1,0.21,0.21,
+LTU,Lithuania,A1,0.21,0.21,
+LUX,Luxembourg,A1,0.17,0.08,reduced rate on gas
+MLT,Malta,A1,0.18,0.05,
+NLD,Netherlands,A1,0.21,0.21,
+POL,Poland,A1,0.23,0.23,
+PRT,Portugal,A1,0.23,0.06,reduced rate on gas
+ROU,Romania,A1,0.19,0.19,
+SVK,Slovakia,A1,0.20,0.20,
+SVN,Slovenia,A1,0.22,0.22,
+ESP,Spain,A1,0.21,0.21,
+SWE,Sweden,A1,0.25,0.25,
+CHN,China,A4,0.13,0.09,reduced rate on gas; reassigned from A2 (GDP $12k not EU-profile)
+JPN,Japan,A2,0.10,0.10,
+KOR,South Korea,A2,0.10,0.10,
+TWN,Taiwan,A2,0.05,0.05,may be absent from EDGAR/OECD; use with care
+ZAF,South Africa,A6,0.15,0.15,reassigned from A2 (GDP $8k; coal-heavy upper-middle income)
+SGP,Singapore,A2,0.07,0.07,2021 rate; rose to 0.09 in 2024; borderline A3 (GDP $80k but net ECP only 15)
+GBR,United Kingdom,A2,0.20,0.05,reduced rate (5%) on domestic gas and electricity
+CHE,Switzerland,A2,0.077,0.077,
+NOR,Norway,A2,0.25,0.25,
+ARG,Argentina,A6,0.21,0.21,reassigned from A3 (GDP $12k; upper-middle not high-income)
+CHL,Chile,A2,0.19,0.19,
+ISR,Israel,A2,0.17,0.17,
+URY,Uruguay,A2,0.22,0.22,
+ISL,Iceland,A2,0.24,0.24,
+CRI,Costa Rica,A2,0.13,0.13,
+PAN,Panama,A6,0.07,0.07,reassigned from A3 (GDP $20k; upper-middle income)
+IND,India,A6,0.18,0.05,petrol/diesel under state excise not GST; gas at 5% GST
+IDN,Indonesia,A6,0.11,0.11,
+BRA,Brazil,A6,0.25,0.25,approximate; ICMS+PIS/COFINS varies by state
+MEX,Mexico,A6,0.16,0.16,
+TUR,Turkey,A6,0.18,0.18,
+VNM,Vietnam,A6,0.10,0.10,
+EGY,Egypt,A6,0.14,0.14,
+THA,Thailand,A6,0.07,0.07,
+COL,Colombia,A6,0.19,0.19,
+MYS,Malaysia,A6,0.06,0.06,SST rate; no GST on fuel
+UKR,Ukraine,A6,0.20,0.20,
+BLR,Belarus,A6,0.20,0.20,
+MMR,Myanmar,A6,0.05,0.05,
+UZB,Uzbekistan,A6,0.12,0.12,
+NGA,Nigeria,A6,0.075,0.075,
+PAK,Pakistan,A6,0.17,0.17,
+BGD,Bangladesh,A6,0.15,0.15,
+KEN,Kenya,A7,0.16,0.16,
+ETH,Ethiopia,A6,0.15,0.15,
+PHL,Philippines,A6,0.12,0.12,
+PER,Peru,A7,0.18,0.18,
+MAR,Morocco,A7,0.20,0.20,
+TZA,Tanzania,A7,0.18,0.18,
+GHA,Ghana,A7,0.15,0.15,
+CIV,Ivory Coast,A7,0.18,0.18,
+SDN,Sudan,A7,0.17,0.17,
+MOZ,Mozambique,A7,0.17,0.17,
+NPL,Nepal,A7,0.13,0.13,
+LKA,Sri Lanka,A7,0.08,0.08,
+KHM,Cambodia,A7,0.10,0.10,
+ECU,Ecuador,A7,0.12,0.12,
+BOL,Bolivia,A7,0.13,0.13,
+GTM,Guatemala,A7,0.12,0.12,
+DOM,Dominican Republic,A7,0.18,0.18,
+JOR,Jordan,A7,0.16,0.16,
+TUN,Tunisia,A7,0.19,0.19,
+RWA,Rwanda,A7,0.18,0.18,
+UGA,Uganda,A7,0.18,0.18,
+ZMB,Zambia,A7,0.16,0.16,
+ZWE,Zimbabwe,A7,0.145,0.145,
+SEN,Senegal,A7,0.18,0.18,
+MLI,Mali,A7,0.18,0.18,
+NER,Niger,A7,0.19,0.19,
+MDG,Madagascar,A7,0.20,0.20,
+GIN,Guinea,A7,0.18,0.18,
+BFA,Burkina Faso,A7,0.18,0.18,
+BEN,Benin,A7,0.18,0.18,
+TGO,Togo,A7,0.18,0.18,
+SLE,Sierra Leone,A7,0.15,0.15,
+LBR,Liberia,A7,0.10,0.10,
+GMB,Gambia,A7,0.15,0.15,
+HTI,Haiti,A7,0.10,0.10,
+NIC,Nicaragua,A7,0.15,0.15,
+HND,Honduras,A7,0.15,0.15,
+SLV,El Salvador,A7,0.13,0.13,
+CUB,Cuba,A7,0.00,0.00,no VAT; socialist pricing
+PRY,Paraguay,A7,0.10,0.10,
+SAU,Saudi Arabia,A5,0.15,0.15,
+ARE,United Arab Emirates,A5,0.05,0.05,
+QAT,Qatar,A5,0.00,0.00,
+KWT,Kuwait,A5,0.00,0.00,
+BHR,Bahrain,A5,0.10,0.10,
+IRQ,Iraq,A5,0.00,0.00,
+IRN,Iran,A5,0.09,0.09,
+OMN,Oman,A5,0.05,0.05,
+RUS,Russia,A5,0.20,0.20,
+LBY,Libya,A5,0.00,0.00,
+DZA,Algeria,A5,0.19,0.19,
+VEN,Venezuela,A5,0.16,0.16,
+AZE,Azerbaijan,A5,0.18,0.18,
+TKM,Turkmenistan,A5,0.15,0.15,
+AGO,Angola,A7,0.14,0.14,reassigned from A6 (GHG 1.9 tCO2/cap; GDP $3k; not per-capita fossil economy)
+TTO,Trinidad and Tobago,A5,0.125,0.125,
+GNQ,Equatorial Guinea,A5,0.15,0.15,
+FJI,Fiji,A7,0.09,0.09,
+VUT,Vanuatu,A7,0.15,0.15,
+SLB,Solomon Islands,A7,0.15,0.15,
+PNG,Papua New Guinea,A7,0.10,0.10,
+WSM,Samoa,A7,0.15,0.15,
+TON,Tonga,A7,0.15,0.15,
+KIR,Kiribati,A7,0.00,0.00,
+TUV,Tuvalu,A7,0.00,0.00,
+NRU,Nauru,A7,0.00,0.00,
+PLW,Palau,A7,0.00,0.00,
+MHL,Marshall Islands,A7,0.00,0.00,
+FSM,Micronesia,A7,0.00,0.00,
+BRB,Barbados,A7,0.175,0.175,
+BHS,Bahamas,A7,0.10,0.10,
+BLZ,Belize,A7,0.125,0.125,
+LCA,Saint Lucia,A7,0.125,0.125,
+GRD,Grenada,A7,0.15,0.15,
+DMA,Dominica,A7,0.15,0.15,
+ATG,Antigua and Barbuda,A7,0.15,0.15,
+KNA,Saint Kitts and Nevis,A7,0.17,0.17,
+VCT,Saint Vincent and the Grenadines,A7,0.16,0.16,
+MDV,Maldives,A7,0.06,0.06,
+SYC,Seychelles,A7,0.15,0.15,
+MUS,Mauritius,A7,0.15,0.15,
+COM,Comoros,A7,0.10,0.10,
+CPV,Cape Verde,A7,0.15,0.15,
+STP,Sao Tome and Principe,A7,0.00,0.00,
+GAB,Gabon,A5,0.18,0.18,reassigned from A7 (OPEC member; oil-dependent state revenues)
+SUR,Suriname,A7,0.10,0.10,
+GUY,Guyana,A7,0.14,0.14,
+BTN,Bhutan,A7,0.07,0.07,
+COG,Republic of Congo,A7,0.18,0.18,reassigned from A7 (continental Africa; oil revenue but poor population)
+COD,DR Congo,A7,0.16,0.16,reassigned from A7 (continental Africa)
+CMR,Cameroon,A7,0.1925,0.1925,reassigned from A7 (continental Africa)
+CAF,Central African Republic,A7,0.19,0.19,reassigned from A7 (continental Africa)
+HKG,Hong Kong,A4,0.00,0.00,SAR of China; no VAT; grouped with China under Themis
+MNG,Mongolia,A6,0.10,0.10,coal-heavy transitioning economy
+LAO,Lao PDR,A6,0.10,0.10,
+BIH,Bosnia and Herzegovina,A6,0.17,0.17,
+GEO,Georgia,A6,0.18,0.18,
+MKD,North Macedonia,A6,0.18,0.18,
+BRN,Brunei Darussalam,A5,0.00,0.00,oil/gas exporter; no VAT
+SYR,Syrian Arab Republic,A7,0.00,0.00,conflict; no functioning VAT
+AFG,Afghanistan,A7,0.10,0.10,
+LBN,Lebanon,A7,0.11,0.11,
+YEM,Yemen,A7,0.05,0.05,
+KGZ,Kyrgyzstan,A7,0.12,0.12,
+TJK,Tajikistan,A7,0.14,0.14,
+MDA,Moldova,A7,0.20,0.20,
+JAM,Jamaica,A7,0.15,0.15,
+PRK,North Korea,A7,0.00,0.00,coal-heavy but isolated; VAT non-functional
+MAC,Macao,A4,0.00,0.00,SAR of China; no VAT; grouped with China under Themis
+PRI,Puerto Rico,A3,0.105,0.105,US territory; SUT 10.5%
+NCL,New Caledonia,A1,0.11,0.11,French territory; TGC rate (differs from metropolitan France)
+GRL,Greenland,A1,0.00,0.00,Danish territory; no VAT; grouped with Denmark/EU
+ANT,Curaçao,A1,0.09,0.09,Dutch territory (Netherlands Antilles); OB rate 9%
+ALB,Albania,A6,0.20,0.20,
+ARM,Armenia,A7,0.20,0.20,
+NAM,Namibia,A7,0.15,0.15,
+BWA,Botswana,A7,0.14,0.14,
+MRT,Mauritania,A7,0.16,0.16,
+MWI,Malawi,A7,0.165,0.165,
+TCD,Chad,A7,0.18,0.18,
+SOM,Somalia,A7,0.10,0.10,fragile state; nominal rate only
+BDI,Burundi,A7,0.18,0.18,
+ERI,Eritrea,A7,0.05,0.05,no functioning VAT
+LSO,Lesotho,A7,0.15,0.15,
+GNB,Guinea-Bissau,A7,0.17,0.17,UEMOA rate
+TLS,Timor-Leste,A7,0.00,0.00,no VAT
+SWZ,Eswatini,A7,0.15,0.15,
+DJI,Djibouti,A7,0.13,0.13,
+PYF,French Polynesia,A7,0.16,0.16,French territory; TGC rate
+ABW,Aruba,A7,0.06,0.06,Dutch territory; BBO tax
+CYM,Cayman Islands,A7,0.00,0.00,no VAT
+BMU,Bermuda,A7,0.00,0.00,no VAT
+TCA,Turks and Caicos Islands,A7,0.00,0.00,no VAT
+VGB,British Virgin Islands,A7,0.00,0.00,no VAT
+AIA,Anguilla,A7,0.00,0.00,no VAT
+COK,Cook Islands,A7,0.15,0.15,
