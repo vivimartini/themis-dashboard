@@ -2,8 +2,6 @@
 
 An interactive simulation of the Themis carbon pricing mechanism. The dashboard takes calibrated preference data for 9 geopolitical actors, runs the full Themis elicitation procedure, and shows what carbon price, coverage, and international transfers the mechanism produces.
 
-This is the working model for my MPhil thesis on mechanism robustness and strategy-proofness in international carbon pricing coalitions.
-
 ## What is Themis?
 
 Themis is a framework for international climate cooperation through a common carbon price. The core idea: nations declare how much carbon pricing they'd accept under different levels of global participation, and the mechanism selects the price-coverage combination that maximises total climate impact — while ensuring that no nation is committed to a price it said it wouldn't accept.
