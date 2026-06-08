@@ -226,9 +226,9 @@ def run_monte_carlo(actor_df: pd.DataFrame, n: int = 500, seed: int = 42,
 
 
 def split_country_from_group(actor_df: pd.DataFrame, country_df: pd.DataFrame, country_name: str) -> pd.DataFrame:
-    """Split a country from its existing actor group. This is a lightweight demo implementation.
-    For countries with enough data in country_data.csv, it creates a new individual actor using
-    inherited alpha parameters from the parent actor, and recalculates the residual group.
+    """Split a country from its existing actor group.
+    Creates a new individual actor with per-country alpha values from country_data.csv.
+    Handles residual groups from previous splits.
     """
     actors = normalise_actor_df(actor_df).copy()
     countries = country_df.copy()
@@ -238,8 +238,18 @@ def split_country_from_group(actor_df: pd.DataFrame, country_df: pd.DataFrame, c
     ctry = match.iloc[0]
     parent_group = str(ctry.get("actor_group", ""))
     parent_idx = ctry.get("actor_idx")
-    parent = actors[(actors["idx"].astype(float) == float(parent_idx))] if pd.notna(parent_idx) else actors[actors["name"].astype(str).str.contains(parent_group, case=False, na=False)]
+    # Find parent: try exact idx first, then name match (including residual groups)
+    parent = pd.DataFrame()
+    if pd.notna(parent_idx):
+        parent = actors[actors["idx"].astype(float) == float(parent_idx)]
     if parent.empty:
+        # Try matching group name including "residual" variants
+        mask = actors["name"].astype(str).str.contains(parent_group, case=False, na=False)
+        parent = actors[mask]
+    if parent.empty:
+        return actors
+    # Check country isn't already split out
+    if actors["name"].astype(str).str.upper().str.contains(country_name.upper(), na=False).any():
         return actors
     p = parent.iloc[0].copy()
     pop = float(ctry["population_m"]); e = float(ctry["emissions_cap"]); gdp = float(ctry["gdp_cap"])
@@ -258,7 +268,17 @@ def split_country_from_group(actor_df: pd.DataFrame, country_df: pd.DataFrame, c
     new["name"] = str(ctry["country"]).upper()
     new["e"] = e; new["pop_m"] = pop; new["gdp_cap"] = gdp
     new["headline_price"] = float(ctry.get("headline_price", 0) or 0)
-    new["narrative"] = f"Split out from {p['name']} for scenario testing. Parameters inherit the parent group until individually calibrated."
+    # Use per-country alpha values if available, otherwise inherit parent
+    if "alpha_base_own" in ctry.index and pd.notna(ctry.get("alpha_base_own")) and float(ctry["alpha_base_own"]) != 0:
+        new["alpha_base"] = float(ctry["alpha_base_own"])
+    elif "alpha_base_own" in ctry.index and float(ctry.get("alpha_base_own", -1)) == 0:
+        new["alpha_base"] = 0.0
+    if "alpha_cov_own" in ctry.index and pd.notna(ctry.get("alpha_cov_own")) and float(ctry["alpha_cov_own"]) != 0:
+        new["alpha_cov"] = float(ctry["alpha_cov_own"])
+    elif "alpha_cov_own" in ctry.index and float(ctry.get("alpha_cov_own", -1)) == 0:
+        new["alpha_cov"] = 0.0
+    new["alpha_trf"] = min(20.0, 20000.0 / max(gdp, 1.0))
+    new["narrative"] = f"Split from {p['name']}. Uses country-specific α_base={new['alpha_base']:.1f}, α_cov={new['alpha_cov']:.0f} from Data Bible research."
     actors = pd.concat([actors, pd.DataFrame([new])], ignore_index=True)
     actors["weight"] = actors["pop_m"] * actors["e"]
     return normalise_actor_df(actors)

@@ -1,358 +1,400 @@
+"""
+Themis Coalition Simulator — Policymaker Edition
+Pre-computes Monte Carlo on load. Every number shows its uncertainty.
+"""
 from __future__ import annotations
-import os
-import numpy as np
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import os, numpy as np, pandas as pd
+import plotly.express as px, plotly.graph_objects as go
 import streamlit as st
 
 from themis_engine import (
-    EngineConfig, EBAR_DEFAULT, normalise_actor_df, run_mechanism, diagnostics,
-    run_monte_carlo, split_country_from_group, preference_values, price_for_coverage,
+    EngineConfig, EBAR_DEFAULT, normalise_actor_df, run_mechanism,
+    diagnostics, run_monte_carlo, split_country_from_group,
+    preference_values, price_for_coverage, solve_tminus, arrays,
 )
 
 st.set_page_config(page_title="Themis Simulator", page_icon="⚖️", layout="wide")
-
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
-ROLE_TEXT = {
-    "CHINA": "Pivotal industrial swing actor: large emissions weight, moderate effective carbon-price exposure, and high sensitivity to broad reciprocal coverage.",
-    "UNITED STATES": "Volatile super-emitter: low federal baseline, high political uncertainty, but more willing when broad coverage reduces competitiveness concerns.",
-    "EUROPEAN UNION": "Carbon-pricing anchor: existing ETS architecture and high willingness when a broader coalition prevents free-riding.",
-    "INDIA": "Development-first transfer-sensitive giant: below world-average per-capita emissions, so transfers make participation materially easier.",
-    "RUSSIA": "Fossil-geopolitical spoiler: low baseline willingness and weak responsiveness to coverage due to fossil rents and geopolitical incentives.",
-    "INDONESIA": "Emerging swing actor: coal, land-use, nickel/industrial strategy and transition finance make willingness sensitive and uncertain.",
-    "ADV. CARBON-PRICED CONDITIONAL JOINERS": "Advanced conditional joiners: rich economies with climate-policy architecture but competitiveness concerns unless major emitters join.",
-    "LOW-CARBON FRONTIER": "Transfer-led beneficiaries: low per-capita emitters whose participation is driven by redistribution and fairness.",
-    "HYDROCARBON RENTIERS": "Fossil-rent resisters: high per-capita emissions and fossil-revenue dependence make baseline willingness very low.",
+ROLE = {
+    "CHINA": ("Pivotal industrial swing actor", "The world's largest emitter. Willing to join a broad coalition at moderate prices — but not at EU levels. CBAM pressure makes inside cheaper than outside.", "#e74c3c"),
+    "UNITED STATES": ("Volatile super-emitter", "No federal carbon price. Willingness depends on who's in power. Broad coverage eases competitiveness fears, but politics can override economics.", "#3498db"),
+    "EUROPEAN UNION": ("Carbon-pricing anchor", "Already pricing carbon via the ETS. Themis gives the EU what it's been doing alone — but with everyone else sharing the commitment. **And it costs the EU almost nothing in transfers**, because EU emissions are close to the world average.", "#27ae60"),
+    "INDIA": ("Development-first giant", "Below the world average in emissions. Receives transfers from day one. The question isn't whether India benefits — it's whether the price is low enough to join.", "#f39c12"),
+    "RUSSIA": ("Fossil-geopolitical spoiler", "Fossil revenues fund the state. Carbon pricing threatens the economic model. Willingness stays very low regardless of who else joins.", "#7f8c8d"),
+    "INDONESIA": ("Emerging swing actor", "Coal, palm oil, nickel, deforestation. A complex emerging economy where the right transition finance could unlock participation.", "#1abc9c"),
+    "ADV. CARBON-PRICED CONDITIONAL JOINERS": ("Advanced conditional joiners", "UK, Japan, Canada, Australia, South Korea. Each has some carbon pricing. They'll join if the big emitters do — levelling the playing field.", "#9b59b6"),
+    "LOW-CARBON FRONTIER": ("Transfer-led beneficiaries", "Nigeria, Bangladesh, Ethiopia. Emit almost nothing per person. Themis pays them for being below the world average.", "#2ecc71"),
+    "HYDROCARBON RENTIERS": ("Fossil-rent resisters", "Saudi Arabia, UAE. Fossil fuels are nearly 100% of the energy system. Carbon pricing is existential.", "#e67e22"),
 }
 
-CARL_MAP = pd.DataFrame([
-    {"Carl archetype": "A1", "Broad type": "EU / developed service economies", "Simulation treatment": "European Union as institutional actor", "Why": "EU climate policy and ETS architecture are shared enough to model as a strategic bloc."},
-    {"Carl archetype": "A2", "Broad type": "Advanced non-EU economies", "Simulation treatment": "Advanced conditional joiners; optional split-out for UK, Japan, Canada, Australia, South Korea", "Why": "Similar competitiveness/reciprocity logic, but important countries can be split for sensitivity."},
-    {"Carl archetype": "A3", "Broad type": "United States-type actor", "Simulation treatment": "United States individual", "Why": "Large emissions weight and no federal price make aggregation misleading."},
-    {"Carl archetype": "A4", "Broad type": "China bloc", "Simulation treatment": "China individual", "Why": "China dominates emissions weight and is a pivotal swing actor."},
-    {"Carl archetype": "A5", "Broad type": "Hydrocarbon states", "Simulation treatment": "Hydrocarbon rentiers + Russia as separate spoiler", "Why": "Fossil-rent states resist for rent reasons; Russia also has geopolitical spoiler dynamics."},
-    {"Carl archetype": "A6", "Broad type": "Transitioning / industrialising states", "Simulation treatment": "India and Indonesia individual; residuals can be explored", "Why": "A6 mixes very different transfer positions; India/Indonesia are too pivotal to bury."},
-    {"Carl archetype": "A7", "Broad type": "Low-carbon / residual frontier", "Simulation treatment": "Low-carbon frontier group", "Why": "The core mechanism role is transfer-led participation."},
-])
+MEMBERS = {
+    "ADV. CARBON-PRICED CONDITIONAL JOINERS": ["United Kingdom", "Japan", "Canada", "Australia", "South Korea"],
+    "LOW-CARBON FRONTIER": ["Nigeria", "Bangladesh", "Ethiopia"],
+    "HYDROCARBON RENTIERS": ["Saudi Arabia", "UAE"],
+}
 
 @st.cache_data
 def load_data():
     actors = pd.read_csv(os.path.join(DATA_DIR, "actors_baseline.csv"))
     countries = pd.read_csv(os.path.join(DATA_DIR, "country_data.csv"))
-    try:
-        carl = pd.read_csv(os.path.join(DATA_DIR, "carl_archetypes.csv"))
-    except Exception:
-        carl = pd.DataFrame()
-    return normalise_actor_df(actors), countries, carl
+    return normalise_actor_df(actors), countries
 
-actors_base, countries_df, carl_df = load_data()
+@st.cache_data
+def precompute_mc(n=500):
+    actors, _ = load_data()
+    mc_config = EngineConfig(c_steps=60, t_steps=61)
+    mc_df, join_probs = run_monte_carlo(actors, n=n, config=mc_config)
+    return mc_df, join_probs
 
-# Session state for interactive actors.
-if "actors_current" not in st.session_state:
-    st.session_state.actors_current = actors_base.copy()
-if "scenario_name" not in st.session_state:
-    st.session_state.scenario_name = "Data Bible baseline"
+actors_base, countries_df = load_data()
 
+if "actors" not in st.session_state:
+    st.session_state.actors = actors_base.copy()
+if "scenario" not in st.session_state:
+    st.session_state.scenario = "Baseline"
+if "splits" not in st.session_state:
+    st.session_state.splits = []
 
-def reset_scenario():
-    st.session_state.actors_current = actors_base.copy()
-    st.session_state.scenario_name = "Data Bible baseline"
+def reset():
+    st.session_state.actors = actors_base.copy()
+    st.session_state.scenario = "Baseline"
+    st.session_state.splits = []
 
-
-def metric_card(label: str, value: str, help_text: str = ""):
-    st.metric(label, value, help=help_text)
-
-
-def format_eur(x):
-    return f"€{x:,.2f}"
-
-
-def build_sidebar():
-    st.sidebar.title("⚖️ Themis Simulator")
-    st.sidebar.caption("Interactive working model: Data Bible → preferences → Themis outcome → transfers.")
-    page = st.sidebar.radio(
-        "Navigate",
-        [
-            "Themis at a glance",
-            "Play with the world",
-            "How Themis chooses",
-            "Actor explorer",
-            "Nested archetypes",
-            "Financial flows",
-            "Robustness",
-            "Diagnostics",
-        ],
-        index=0,
-    )
-    st.sidebar.divider()
-    st.sidebar.write("**Global assumptions**")
-    t_cap_choice = st.sidebar.selectbox("Contributor transfer cap", ["No cap", "0.30", "0.40", "0.50", "0.70", "1.00"], index=0)
-    t_cap = None if t_cap_choice == "No cap" else float(t_cap_choice)
-    c_steps = st.sidebar.slider("Coverage grid resolution", 40, 140, 100, 10)
-    t_steps = st.sidebar.slider("Transfer grid resolution", 31, 121, 101, 10)
-    st.sidebar.info("World average benchmark is fixed at ē = 6.6 tCO₂e/cap. T− is solved to balance the transfer pool.")
-    if st.sidebar.button("Reset to Data Bible baseline", use_container_width=True):
-        reset_scenario()
-        st.rerun()
-    return page, EngineConfig(ebar=EBAR_DEFAULT, c_steps=c_steps, t_steps=t_steps, t_cap=t_cap)
-
-page, config = build_sidebar()
-actors = normalise_actor_df(st.session_state.actors_current)
+# Pre-compute MC and baseline
+mc_df, join_probs = precompute_mc(500)
+config = EngineConfig(ebar=EBAR_DEFAULT, c_steps=100, t_steps=101)
+actors = normalise_actor_df(st.session_state.actors)
 res = run_mechanism(actors, config=config)
-actor_res = res["actor_results"]
 acct = res["accounting"]
-diag = diagnostics(actors, res)
+ar = res["actor_results"]
 
-st.title("Themis: Interactive Carbon Pricing Coalition Simulator")
-st.caption("A working model of Themis for fast public explanation, policy exploration, and mechanism audit. RQ2 strategy testing is intentionally left out of this version.")
+# Merge join probs into actor results
+jp_map = dict(zip(join_probs["Actor"], join_probs["Join probability"]))
+ar["join_pct"] = ar["name"].map(jp_map).fillna(0.5)
 
-if page == "Themis at a glance":
-    st.subheader("Themis in 30 seconds")
-    st.markdown(
-        """
-        **Themis asks a simple question:** what common carbon price can enough emissions-weighted actors accept?  
-        The mechanism selects a price, coverage level and contributor transfer rate, then solves the beneficiary payout rate so the international pool balances.
-        """
+# ── Sidebar ──
+st.sidebar.title("⚖️ Themis")
+st.sidebar.caption("Carbon pricing coalition simulator")
+page = st.sidebar.radio("", [
+    "🤝 The Coalition",
+    "🔀 What If",
+    "⚙️ The Mechanism",
+    "✅ Audit",
+])
+st.sidebar.divider()
+st.sidebar.markdown(f"**Scenario:** {st.session_state.scenario}")
+st.sidebar.markdown(f"**Benchmark:** ē = {EBAR_DEFAULT} tCO₂e/cap")
+# MC context
+st.sidebar.markdown(f"**Monte Carlo:** 500 runs pre-computed")
+st.sidebar.markdown(f"Price range: €{mc_df['p_star'].quantile(0.1):.0f}–{mc_df['p_star'].quantile(0.9):.0f}")
+st.sidebar.markdown(f"Coverage range: {mc_df['actual_coverage'].quantile(0.1):.0%}–{mc_df['actual_coverage'].quantile(0.9):.0%}")
+if st.sidebar.button("Reset to baseline", use_container_width=True):
+    reset(); st.rerun()
+
+
+# ═══════════════════════════════════════════════════════════════
+# PAGE 1: THE COALITION (merged Deal + Actor Explorer + MC)
+# ═══════════════════════════════════════════════════════════════
+if page == "🤝 The Coalition":
+    st.title("The Coalition")
+
+    # ── Headline with MC context ──
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Carbon price", f"€{res['p_star']:.2f}/ton",
+              help=f"90% MC range: €{mc_df['p_star'].quantile(0.1):.0f}–{mc_df['p_star'].quantile(0.9):.0f}")
+    c2.metric("Coverage", f"{res['actual_coverage']:.0%}",
+              help=f"90% MC range: {mc_df['actual_coverage'].quantile(0.1):.0%}–{mc_df['actual_coverage'].quantile(0.9):.0%}")
+    c3.metric("T+ (contributors)", f"{res['Tplus_star']:.2f}",
+              help="Contributor transfer rate, optimised by mechanism alongside p and c")
+    c4.metric("T− (beneficiaries)", f"{res['Tminus_actual']:.2f}",
+              help="Solved endogenously so the international pool balances exactly")
+    sent = acct["total_sent_mEUR"].sum()
+    c5.metric("Annual pool", f"€{sent/1000:,.0f}bn",
+              help="Total international transfers per year")
+
+    # ── Explanation ──
+    joiners = ar[ar["joins"]]["name"].tolist()
+    non_joiners = ar[~ar["joins"]]["name"].tolist()
+    st.info(
+        f"At **€{res['p_star']:.2f}/ton**, actors covering **{res['actual_coverage']:.0%}** of global emissions join. "
+        f"T+ is optimised by the mechanism (not set by hand) — it's the transfer level that produces the best c×p outcome. "
+        f"T− is then solved so the pool balances exactly."
     )
-    col1, col2, col3, col4, col5 = st.columns(5)
-    with col1: metric_card("Carbon price p*", format_eur(res["p_star"]), "Selected common carbon price.")
-    with col2: metric_card("Target coverage c*", f"{res['c_star']:.1%}", "Coverage selected by the mechanism.")
-    with col3: metric_card("Actual coverage", f"{res['actual_coverage']:.1%}", "Emission-weighted coverage from realised joiners.")
-    with col4: metric_card("T+", f"{res['Tplus_star']:.2f}", "Contributor transfer intensity.")
-    with col5: metric_card("T−", f"{res['Tminus_actual']:.2f}", "Beneficiary payout rate solved to balance pool.")
 
-    sent = acct["total_sent_mEUR"].sum(); received = acct["total_received_mEUR"].sum(); balance = sent - received
-    c1, c2, c3 = st.columns(3)
-    with c1: metric_card("Total sent into pool", f"€{sent/1000:,.1f}bn")
-    with c2: metric_card("Total paid out", f"€{received/1000:,.1f}bn")
-    with c3: metric_card("Pool balance", f"€{balance:,.4f}m")
+    st.divider()
 
-    st.markdown("### Coalition result")
-    left, right = st.columns([1.2, 1])
-    with left:
-        display = actor_res[["name", "join_status", "preference_at_solution", "weight", "e", "role"]].copy()
-        display["weight"] = display["weight"].map(lambda x: f"{x:.1%}")
-        display["preference_at_solution"] = display["preference_at_solution"].map(lambda x: f"€{x:.2f}")
-        st.dataframe(display.rename(columns={"name":"Actor", "join_status":"Status", "preference_at_solution":"Willingness at outcome", "weight":"Emissions weight", "e":"tCO₂e/cap", "role":"Transfer role"}), use_container_width=True, hide_index=True)
-    with right:
-        fig = px.bar(acct, x="name", y="net_transfer_per_cap", color="status", title="Net international transfer per capita", labels={"name":"Actor", "net_transfer_per_cap":"€/capita"})
-        fig.update_layout(xaxis_tickangle=-35, height=430)
-        st.plotly_chart(fig, use_container_width=True)
+    # ── Actor cards ──
+    st.markdown("### Actor positions")
+    st.caption("Click any actor to expand. Join probability from 500 Monte Carlo runs.")
 
-    st.markdown("### What this result means")
-    st.success(
-        "The model finds a broad coalition when the selected price is acceptable to enough emissions-weighted actors. "
-        "High emitters pay into the pool; low emitters receive; T− is solved so what goes in equals what comes out."
+    for _, row in ar.iterrows():
+        name = row["name"]
+        role_title, role_desc, color = ROLE.get(name, ("", "", "#95a5a6"))
+        acc_row = acct[acct["name"] == name].iloc[0]
+        joins = row["joins"]
+        jp = row["join_pct"]
+
+        # Status bar
+        status = "✅ Joins" if joins else "❌ Stays out"
+        margin = row["preference_at_solution"] - res["p_star"]
+
+        with st.expander(f"{'🟢' if joins else '🔴'} **{name}** — {role_title} | {status} | Willing: €{row['preference_at_solution']:.1f} | MC join: {jp:.0%}"):
+            left, right = st.columns([1.2, 1])
+
+            with left:
+                st.markdown(role_desc)
+                st.divider()
+
+                # Financial position
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Carbon cost", f"€{acc_row['collected_per_cap']:.0f}/cap/yr")
+                net_trf = acc_row["net_transfer_per_cap"]
+                m2.metric("Net transfer", f"€{net_trf:+.1f}/cap/yr")
+                gdp = row["gdp_cap"]
+                pct_gdp = abs(net_trf) / gdp * 100 if gdp > 0 else 0
+                m3.metric("% of GDP", f"{pct_gdp:.2f}%")
+
+                # EU insight
+                if "EUROPEAN" in name:
+                    st.success(
+                        f"**The EU barely feels the transfers.** At {row['e']:.2f} tCO₂e/cap (just {row['e']-EBAR_DEFAULT:.2f} above "
+                        f"world average), the EU's net contribution is only €{abs(net_trf):.1f}/cap/yr — {pct_gdp:.2f}% of GDP. "
+                        f"Joining Themis costs the EU almost nothing while giving it what it's been trying to do alone: "
+                        f"a level playing field where everyone prices carbon."
+                    )
+
+                # Marginal joiner insight
+                if joins and 0 < margin < 5:
+                    st.warning(f"**Marginal joiner.** Willingness is only €{margin:.1f} above the price. Small changes in assumptions could flip this actor out.")
+                elif not joins and margin > -10:
+                    st.warning(f"**Near-joiner.** Only €{abs(margin):.1f} below the price. More transfers or lower price could bring them in.")
+
+                if name in MEMBERS:
+                    st.markdown(f"**Countries inside:** {', '.join(MEMBERS[name])}")
+
+            with right:
+                # Willingness curve
+                c_range = np.linspace(0, 1, 60)
+                arr_data = arrays(actors)
+                idx = list(arr_data["names"]).index(name)
+
+                base_curve = [max(0, float(row["alpha_base"]) + float(row["alpha_cov"]) * c) for c in c_range]
+                full_curve = []
+                for c in c_range:
+                    tm = solve_tminus(arr_data["e"], arr_data["pop"], res["Tplus_star"])
+                    prefs = preference_values(arr_data["e"], arr_data["alpha_base"], arr_data["alpha_cov"],
+                                              arr_data["alpha_trf"], float(c), res["Tplus_star"], tm)
+                    full_curve.append(float(prefs[idx]))
+
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=c_range, y=base_curve, name="Without transfers", line=dict(dash="dash", color="#bdc3c7")))
+                fig.add_trace(go.Scatter(x=c_range, y=full_curve, name="With transfers", line=dict(color=color, width=2.5)))
+                fig.add_hline(y=res["p_star"], line_dash="dot", line_color="#e74c3c",
+                              annotation_text=f"Price €{res['p_star']:.0f}")
+                fig.add_vline(x=res["c_star"], line_dash="dot", line_color="#27ae60",
+                              annotation_text=f"c*={res['c_star']:.0%}")
+                fig.update_layout(height=280, margin=dict(t=20, b=30, l=40, r=10),
+                                  xaxis_title="Coverage", yaxis_title="€/ton",
+                                  legend=dict(orientation="h", y=-0.2))
+                st.plotly_chart(fig, use_container_width=True)
+
+    # ── Net transfers chart ──
+    st.divider()
+    st.markdown("### International transfers")
+    fig = px.bar(
+        acct.sort_values("net_transfer_per_cap"), x="net_transfer_per_cap", y="name",
+        orientation="h", color="status",
+        color_discrete_map={"Contributor": "#e74c3c", "Beneficiary": "#27ae60"},
+        labels={"net_transfer_per_cap": "€/capita/year", "name": ""},
     )
-
-elif page == "Play with the world":
-    st.subheader("Play with the world")
-    st.markdown("Adjust actor assumptions and instantly rerun Themis. This is the Model UN-style sandbox.")
-    work = actors.copy()
-    edit_cols = ["name", "alpha_base", "alpha_cov", "alpha_trf", "e", "pop_m", "gdp_cap"]
-    edited = st.data_editor(
-        work[edit_cols],
-        num_rows="fixed",
-        use_container_width=True,
-        column_config={
-            "name": st.column_config.TextColumn("Actor", disabled=True),
-            "alpha_base": st.column_config.NumberColumn("α_base", min_value=-50.0, max_value=120.0, step=0.5),
-            "alpha_cov": st.column_config.NumberColumn("α_cov", min_value=0.0, max_value=150.0, step=1.0),
-            "alpha_trf": st.column_config.NumberColumn("α_trf", min_value=0.0, max_value=25.0, step=0.1),
-            "e": st.column_config.NumberColumn("tCO₂e/cap", min_value=-10.0, max_value=40.0, step=0.1),
-            "pop_m": st.column_config.NumberColumn("Population M", min_value=0.0, max_value=2000.0, step=1.0),
-            "gdp_cap": st.column_config.NumberColumn("GDP/cap", min_value=0.0, max_value=150000.0, step=100.0),
-        },
-    )
-    if st.button("Apply edits and rerun", type="primary"):
-        updated = work.copy()
-        for col in edited.columns:
-            updated[col] = edited[col]
-        updated["weight"] = updated["pop_m"] * updated["e"].clip(lower=0)
-        st.session_state.actors_current = normalise_actor_df(updated)
-        st.session_state.scenario_name = "Edited scenario"
-        st.rerun()
-
-    st.markdown("### Quick scenario buttons")
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        if st.button("Lower EU α_base to 12"):
-            temp = actors.copy(); temp.loc[temp["name"].str.contains("EUROPEAN", case=False), "alpha_base"] = 12
-            st.session_state.actors_current = normalise_actor_df(temp); st.session_state.scenario_name = "EU base lowered"; st.rerun()
-    with c2:
-        if st.button("Make US less cooperative"):
-            temp = actors.copy(); m=temp["name"].str.contains("UNITED", case=False); temp.loc[m,"alpha_cov"] = temp.loc[m,"alpha_cov"]*0.65
-            st.session_state.actors_current = normalise_actor_df(temp); st.session_state.scenario_name = "US less cooperative"; st.rerun()
-    with c3:
-        if st.button("Make China more cautious"):
-            temp = actors.copy(); m=temp["name"].str.contains("CHINA", case=False); temp.loc[m,"alpha_cov"] = temp.loc[m,"alpha_cov"]*0.75
-            st.session_state.actors_current = normalise_actor_df(temp); st.session_state.scenario_name = "China more cautious"; st.rerun()
-    with c4:
-        if st.button("Boost India transfer sensitivity"):
-            temp = actors.copy(); m=temp["name"].str.contains("INDIA", case=False); temp.loc[m,"alpha_trf"] = temp.loc[m,"alpha_trf"]*1.25
-            st.session_state.actors_current = normalise_actor_df(temp); st.session_state.scenario_name = "India transfer boost"; st.rerun()
-
-    st.markdown("### Current scenario outcome")
-    st.write(f"Scenario: **{st.session_state.scenario_name}**")
-    st.dataframe(actor_res[["name", "preference_at_solution", "joins", "e", "weight", "alpha_base", "alpha_cov", "alpha_trf"]], use_container_width=True, hide_index=True)
-
-elif page == "How Themis chooses":
-    st.subheader("How Themis chooses the deal")
-    st.markdown(
-        """
-        The mechanism has three visible steps:  
-        **1.** Actors have willingness curves.  
-        **2.** The weighted quantile gives the feasible price at each coverage level.  
-        **3.** The mechanism chooses the point that maximises **coverage × price**.
-        """
-    )
-    c_grid = np.linspace(config.c_min, config.c_max, 100)
-    curves = []
-    # Use selected T+ and T- for preference curves.
-    for _, row in actors.iterrows():
-        for c in c_grid:
-            val = preference_values(
-                np.array([row["e"]]), np.array([row["alpha_base"]]), np.array([row["alpha_cov"]]), np.array([row["alpha_trf"]]),
-                float(c), res["Tplus_star"], res["Tminus_actual"], EBAR_DEFAULT
-            )[0]
-            curves.append({"coverage": c, "price": val, "actor": row["name"]})
-    curve_df = pd.DataFrame(curves)
-    fig = px.line(curve_df, x="coverage", y="price", color="actor", title="Actor willingness curves at selected transfer intensity", labels={"coverage":"Coverage c", "price":"Acceptable price €/t"})
-    fig.add_hline(y=res["p_star"], line_dash="dash", annotation_text="p*")
-    fig.add_vline(x=res["c_star"], line_dash="dash", annotation_text="c*")
+    fig.update_layout(height=380, showlegend=False, margin=dict(l=0))
+    fig.add_vline(x=0, line_dash="dash", line_color="grey")
     st.plotly_chart(fig, use_container_width=True)
 
-    c1, c2 = st.columns(2)
-    with c1:
-        fig2 = px.line(res["curve"], x="coverage", y="feasible_price", title="Weighted-quantile feasible price curve", labels={"coverage":"Coverage c", "feasible_price":"p(c) €/t"})
-        fig2.add_scatter(x=[res["c_star"]], y=[res["p_star"]], mode="markers", marker=dict(size=12), name="selected")
-        st.plotly_chart(fig2, use_container_width=True)
-    with c2:
-        fig3 = px.line(res["curve"], x="coverage", y="objective", title="Objective curve: c × p(c)", labels={"coverage":"Coverage c", "objective":"c × p"})
-        fig3.add_scatter(x=[res["c_star"]], y=[res["objective"]], mode="markers", marker=dict(size=12), name="selected")
-        st.plotly_chart(fig3, use_container_width=True)
 
-elif page == "Actor explorer":
-    st.subheader("Actor explorer")
-    selected = st.selectbox("Choose an actor", actors["name"].tolist())
-    row = actor_res[actor_res["name"] == selected].iloc[0]
-    accrow = acct[acct["name"] == selected].iloc[0]
-    st.markdown(f"### {selected}")
-    st.info(ROLE_TEXT.get(selected, row.get("narrative", "No narrative available.")))
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Emissions/capita", f"{row['e']:.2f}")
-    c2.metric("Emissions weight", f"{row['weight']:.1%}")
-    c3.metric("Willingness", format_eur(row["preference_at_solution"]))
-    c4.metric("Selected p*", format_eur(res["p_star"]))
-    c5.metric("Joins?", "Yes" if row["joins"] else "No")
-    left, right = st.columns(2)
-    with left:
-        st.markdown("#### Parameters")
-        st.dataframe(pd.DataFrame([
-            {"Parameter":"α_base", "Value":row["alpha_base"], "Interpretation":"baseline effective carbon-price willingness"},
-            {"Parameter":"α_cov", "Value":row["alpha_cov"], "Interpretation":"coverage/reciprocity sensitivity"},
-            {"Parameter":"α_trf", "Value":row["alpha_trf"], "Interpretation":"transfer sensitivity"},
-        ]), use_container_width=True, hide_index=True)
-        st.markdown("#### Financial position")
-        st.dataframe(pd.DataFrame([
-            {"Flow":"Sent/capita", "Value":accrow["sent_per_cap"]},
-            {"Flow":"Received/capita", "Value":accrow["received_per_cap"]},
-            {"Flow":"Net transfer/capita", "Value":accrow["net_transfer_per_cap"]},
-            {"Flow":"Total net transfer mEUR", "Value":accrow["net_total_mEUR"]},
-        ]), use_container_width=True, hide_index=True)
-    with right:
-        tmp=[]
-        for c in np.linspace(0.01,1,100):
-            tmp.append({"coverage":c,"price":preference_values(np.array([row["e"]]),np.array([row["alpha_base"]]),np.array([row["alpha_cov"]]),np.array([row["alpha_trf"]]),float(c),res["Tplus_star"],res["Tminus_actual"],EBAR_DEFAULT)[0]})
-        fig=px.line(pd.DataFrame(tmp), x="coverage", y="price", title=f"{selected} willingness curve")
-        fig.add_hline(y=res["p_star"], line_dash="dash", annotation_text="p*")
-        fig.add_vline(x=res["c_star"], line_dash="dash", annotation_text="c*")
-        st.plotly_chart(fig, use_container_width=True)
+# ═══════════════════════════════════════════════════════════════
+# PAGE 2: WHAT IF
+# ═══════════════════════════════════════════════════════════════
+elif page == "🔀 What If":
+    st.title("What If")
+    st.markdown("Each scenario reruns the full mechanism. MC context shows how the baseline compares.")
 
-elif page == "Nested archetypes":
-    st.subheader("Nested archetypes")
-    st.markdown("Carl's A1–A7 taxonomy is used as a **world map / drill-down layer**. The simulation core keeps strategically pivotal actors separate.")
-    st.dataframe(CARL_MAP, use_container_width=True, hide_index=True)
-    st.markdown("### Split a country out of a group")
-    available = countries_df["country"].astype(str).tolist()
-    split_country = st.selectbox("Country to split out", available)
-    col1, col2 = st.columns([1,1])
-    with col1:
-        if st.button("Split selected country and rerun", type="primary"):
-            st.session_state.actors_current = split_country_from_group(actors, countries_df, split_country)
-            st.session_state.scenario_name = f"Split out {split_country}"
+    tab1, tab2, tab3 = st.tabs(["Quick scenarios", "Drill into a group", "Custom edit"])
+
+    with tab1:
+        cols = st.columns(3)
+        scenarios = [
+            ("US withdraws", "UNITED STATES", {"alpha_base": 0, "alpha_cov": 0}),
+            ("China more cautious", "CHINA", {"alpha_cov": lambda x: x*0.5}),
+            ("Pro-climate US", "UNITED STATES", {"alpha_cov": 45}),
+            ("Double transfers", None, {"alpha_trf": lambda x: x*2}),
+            ("Fossil bloc excluded", "RUSSIA|HYDROCARBON", {"alpha_base": 0, "alpha_cov": 0, "alpha_trf": 0}),
+            ("EU less ambitious", "EUROPEAN", {"alpha_base": 10}),
+        ]
+        for i, (label, pattern, changes) in enumerate(scenarios):
+            with cols[i % 3]:
+                if st.button(label, use_container_width=True):
+                    temp = actors_base.copy()
+                    if pattern:
+                        m = temp["name"].str.contains(pattern, case=False)
+                    else:
+                        m = pd.Series([True]*len(temp))
+                    for k, v in changes.items():
+                        if callable(v):
+                            temp.loc[m, k] = v(temp.loc[m, k])
+                        else:
+                            temp.loc[m, k] = v
+                    st.session_state.actors = normalise_actor_df(temp)
+                    st.session_state.scenario = label
+                    st.rerun()
+
+    with tab2:
+        st.markdown("Groups combine countries with similar strategic types. Split one out to test if it behaves differently.")
+        # Find groups that still exist (including residual groups)
+        available_groups = {}
+        for orig_name, member_list in MEMBERS.items():
+            # Check for original or residual version of the group
+            remaining_members = [m for m in member_list if m not in st.session_state.splits]
+            if not remaining_members:
+                continue
+            # Find matching actor (original name or residual)
+            match = actors[actors["name"].astype(str).str.contains(orig_name[:20], case=False, na=False)]
+            if not match.empty:
+                available_groups[orig_name] = remaining_members
+
+        if not available_groups:
+            st.info("All group members have been split out.")
+        else:
+            sel = st.selectbox("Select group", list(available_groups.keys()))
+            remaining = available_groups[sel]
+            member_data = countries_df[countries_df["country"].isin(remaining)]
+            if not member_data.empty:
+                st.dataframe(member_data[["country","emissions_cap","population_m","gdp_cap","headline_price","notes"]],
+                             use_container_width=True, hide_index=True)
+            split_who = st.selectbox("Split out", remaining)
+            if st.button(f"Split {split_who}", type="primary"):
+                updated = split_country_from_group(st.session_state.actors, countries_df, split_who)
+                if len(updated) > len(st.session_state.actors):
+                    st.session_state.actors = updated
+                    st.session_state.splits.append(split_who)
+                    st.session_state.scenario = f"Split: {', '.join(st.session_state.splits)}"
+                    st.rerun()
+                else:
+                    st.warning(f"{split_who} may already be split out or could not be found in the group.")
+
+    with tab3:
+        edited = st.data_editor(actors[["name","alpha_base","alpha_cov","alpha_trf","e","pop_m"]],
+                                num_rows="fixed", use_container_width=True,
+                                column_config={"name": st.column_config.TextColumn("Actor", disabled=True)})
+        if st.button("Apply and rerun", type="primary"):
+            temp = actors.copy()
+            for col in edited.columns: temp[col] = edited[col]
+            st.session_state.actors = normalise_actor_df(temp)
+            st.session_state.scenario = "Custom"
             st.rerun()
-    with col2:
-        if st.button("Merge/reset all split-outs"):
-            reset_scenario(); st.rerun()
-    st.markdown("### Current runtime actor set")
-    st.dataframe(actors[["name","e","pop_m","weight","alpha_base","alpha_cov","alpha_trf"]], use_container_width=True, hide_index=True)
-    if not carl_df.empty:
-        st.markdown("### Carl archetype file preview")
-        st.dataframe(carl_df.head(120), use_container_width=True, hide_index=True)
 
-elif page == "Financial flows":
-    st.subheader("Transfer pool and financial flows")
-    st.markdown("Fixed benchmark: **ē = 6.6 tCO₂e/cap**. Contributors pay using **T+**; beneficiaries receive using **T−**, which is solved so the pool balances.")
-    sent = acct["total_sent_mEUR"].sum(); received = acct["total_received_mEUR"].sum(); balance = sent-received
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("T+", f"{res['Tplus_star']:.3f}")
-    col2.metric("T−", f"{res['Tminus_actual']:.3f}")
-    col3.metric("Total pool", f"€{sent/1000:,.1f}bn")
-    col4.metric("Balance", f"€{balance:,.4f}m")
-    st.latex(r"T^- = T^+ \times \frac{\sum_i pop_i \max(e_i - \bar{e}, 0)}{\sum_i pop_i \max(\bar{e} - e_i, 0)}")
-    flows = acct[["name","joins","status","sent_per_cap","received_per_cap","net_transfer_per_cap","total_sent_mEUR","total_received_mEUR","net_total_mEUR"]].copy()
-    st.dataframe(flows, use_container_width=True, hide_index=True)
-    c1,c2=st.columns(2)
-    with c1:
-        fig=px.bar(flows, x="name", y="net_transfer_per_cap", color="status", title="Per-capita net international transfer")
-        fig.update_layout(xaxis_tickangle=-35)
-        st.plotly_chart(fig, use_container_width=True)
-    with c2:
-        fig2=px.bar(flows, x="name", y="net_total_mEUR", color="status", title="Aggregate net international transfer")
-        fig2.update_layout(xaxis_tickangle=-35)
+    st.divider()
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Price", f"€{res['p_star']:.2f}")
+    c2.metric("Coverage", f"{res['actual_coverage']:.0%}")
+    c3.metric("T+", f"{res['Tplus_star']:.2f}")
+    c4.metric("T−", f"{res['Tminus_actual']:.2f}")
+
+
+# ═══════════════════════════════════════════════════════════════
+# PAGE 3: THE MECHANISM
+# ═══════════════════════════════════════════════════════════════
+elif page == "⚙️ The Mechanism":
+    st.title("How Themis Chooses")
+    st.markdown("""
+    **The mechanism optimises three things simultaneously:** price (p), coverage (c), and transfer rate (T+).
+    T− is then solved so the pool balances. The objective is to maximise **c × p** — total climate impact.
+    """)
+
+    # 1. Feasible price curve
+    curve = res["curve"]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=curve["coverage"], y=curve["feasible_price"], name="Feasible price p(c)", line=dict(color="#2c3e50", width=2)))
+    fig.add_trace(go.Scatter(x=curve["coverage"], y=curve["objective"], name="c × p(c)", line=dict(color="#e67e22", width=2, dash="dash")))
+    fig.add_vline(x=res["c_star"], line_dash="dot", line_color="#27ae60", annotation_text=f"c*={res['c_star']:.0%}")
+    fig.add_hline(y=res["p_star"], line_dash="dot", line_color="#e74c3c", annotation_text=f"p*=€{res['p_star']:.1f}")
+    fig.update_layout(height=420, xaxis_title="Coverage", yaxis_title="€/ton", title="Quantile price curve and objective")
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("As coverage rises, the price must drop to include less-willing actors. The peak of c×p is the mechanism's choice.")
+
+    # 2. T+ frontier
+    frontier = res["frontier_by_Tplus"]
+    col1, col2 = st.columns(2)
+    with col1:
+        fig2 = px.line(frontier, x="Tplus", y="objective", title="How T+ affects total climate impact",
+                        labels={"Tplus": "T+ (contributor rate)", "objective": "c × p"})
+        fig2.add_vline(x=res["Tplus_star"], line_dash="dot", line_color="red", annotation_text=f"T*={res['Tplus_star']:.2f}")
+        fig2.update_layout(height=350)
         st.plotly_chart(fig2, use_container_width=True)
+        st.caption("T+ is optimised — not set by hand. The mechanism finds the transfer level that maximises coalition impact.")
 
-elif page == "Robustness":
-    st.subheader("Monte Carlo robustness")
-    st.markdown("This checks whether the basic Themis outcome survives uncertainty in the Data Bible parameters.")
-    n = st.slider("Runs", 100, 2000, 500, 100)
-    seed = st.number_input("Seed", min_value=1, max_value=99999, value=42)
-    run = st.button("Run Monte Carlo", type="primary")
-    if run:
-        with st.spinner("Running simulations..."):
-            mc, joins = run_monte_carlo(actors, n=int(n), seed=int(seed), config=EngineConfig(ebar=EBAR_DEFAULT, c_steps=50, t_steps=51, t_cap=config.t_cap))
-        st.success("Monte Carlo complete")
-        c1,c2,c3=st.columns(3)
-        c1.metric("Mean p*", format_eur(mc["p_star"].mean()))
-        c2.metric("Median coverage", f"{mc['actual_coverage'].median():.1%}")
-        c3.metric("Mean T+", f"{mc['Tplus_star'].mean():.3f}")
-        a,b,c=st.columns(3)
-        with a: st.plotly_chart(px.histogram(mc, x="p_star", nbins=30, title="Distribution of selected price p*"), use_container_width=True)
-        with b: st.plotly_chart(px.histogram(mc, x="actual_coverage", nbins=30, title="Distribution of actual coverage"), use_container_width=True)
-        with c: st.plotly_chart(px.histogram(mc, x="Tplus_star", nbins=30, title="Distribution of T+"), use_container_width=True)
-        st.markdown("### Join probabilities")
-        st.dataframe(joins.sort_values("Join probability", ascending=False), use_container_width=True, hide_index=True)
-        st.download_button("Download Monte Carlo CSV", mc.to_csv(index=False), file_name="themis_monte_carlo.csv", mime="text/csv")
-    else:
-        st.info("Run Monte Carlo to see robustness distributions and join probabilities.")
+    with col2:
+        fig3 = px.line(frontier, x="Tplus", y=["p", "c"], title="Price and coverage vs transfer rate",
+                        labels={"Tplus": "T+", "value": "", "variable": ""})
+        fig3.update_layout(height=350)
+        st.plotly_chart(fig3, use_container_width=True)
+        st.caption("Higher transfers bring in more actors (coverage rises) but lower the price they'll accept.")
 
-elif page == "Diagnostics":
-    st.subheader("Diagnostics / audit")
-    st.markdown("This page checks that the mechanism is not a black box. Every rerun should pass these checks.")
-    st.dataframe(diag, use_container_width=True, hide_index=True)
-    failed = diag[diag["Status"] != "PASS"]
-    if failed.empty:
-        st.success("All core diagnostics pass.")
-    else:
-        st.error("One or more diagnostics failed. Inspect the table above.")
-    st.markdown("### Mechanism frontier by T+")
-    st.dataframe(res["frontier_by_Tplus"].tail(20), use_container_width=True, hide_index=True)
-    st.markdown("### Current actor data")
-    st.dataframe(actors, use_container_width=True, hide_index=True)
+    # 3. MC distributions
+    st.divider()
+    st.markdown("### Robustness: 500 Monte Carlo runs")
+    st.markdown("Every preference parameter perturbed within its Data Bible uncertainty range.")
+    col1, col2 = st.columns(2)
+    with col1:
+        fig = px.histogram(mc_df, x="p_star", nbins=40, title="Price distribution",
+                           labels={"p_star": "€/ton"}, color_discrete_sequence=["#2c3e50"])
+        fig.add_vline(x=res["p_star"], line_dash="dash", line_color="red", annotation_text="Baseline")
+        st.plotly_chart(fig, use_container_width=True)
+    with col2:
+        fig = px.histogram(mc_df, x="actual_coverage", nbins=40, title="Coverage distribution",
+                           labels={"actual_coverage": "Coverage"}, color_discrete_sequence=["#27ae60"])
+        fig.add_vline(x=res["actual_coverage"], line_dash="dash", line_color="red", annotation_text="Baseline")
+        st.plotly_chart(fig, use_container_width=True)
 
-st.divider()
-st.caption("Prototype Streamlit implementation. Baseline uses fixed world average ē = 6.6, T+/T− balanced transfers, and the Data Bible actor calibration. Strategy/RQ2 module intentionally excluded from this public v1.")
+    # Join probabilities
+    st.markdown("### Join reliability")
+    fig = px.bar(join_probs.sort_values("Join probability"), x="Join probability", y="Actor",
+                 orientation="h", color="Join probability",
+                 color_continuous_scale=["#e74c3c", "#f39c12", "#27ae60"], range_color=[0,1])
+    fig.update_layout(height=350)
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Actors above 90% are reliable joiners. Actors below 50% are likely non-joiners. The middle ground is where assumptions matter most.")
+
+
+# ═══════════════════════════════════════════════════════════════
+# PAGE 4: AUDIT
+# ═══════════════════════════════════════════════════════════════
+elif page == "✅ Audit":
+    st.title("Audit Trail")
+    diag = diagnostics(actors, res)
+    for _, row in diag.iterrows():
+        icon = "✅" if row["Status"] == "PASS" else "❌"
+        st.markdown(f"{icon} **{row['Check']}** — {row['Detail']}")
+
+    st.divider()
+    st.markdown("### Full transfer accounting")
+    st.dataframe(acct[["name","status","e","pop_m","collected_per_cap","sent_per_cap","received_per_cap",
+                        "net_transfer_per_cap","total_sent_mEUR","total_received_mEUR"]],
+                 use_container_width=True, hide_index=True)
+    balance = acct["total_sent_mEUR"].sum() - acct["total_received_mEUR"].sum()
+    st.metric("Pool balance", f"€{balance:,.4f}M")
+
+    st.divider()
+    st.markdown("### Data sources")
+    st.markdown("""
+    | Data | Source |
+    |---|---|
+    | Emissions | EDGAR 2025 JRC |
+    | Population / GDP | World Bank 2024 |
+    | Carbon pricing | OECD ECR 2025, ICAP, EU Commission, Climate Action Tracker |
+    | α_base | OECD Net ECR / explicit carbon prices (A/B) |
+    | α_cov | 70% coverage thought experiment (C — tested via MC) |
+    | α_trf | k/GDP_cap, k=20,000, capped at 20 (B/C) |
+    """)
