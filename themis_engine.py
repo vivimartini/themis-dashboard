@@ -99,6 +99,113 @@ def transfer_accounting(actor_df: pd.DataFrame, p: float, tplus: float, tminus: 
     return df
 
 
+def run_mechanism_selfconsistent(actor_df: pd.DataFrame, config: Optional[EngineConfig] = None) -> Dict[str, Any]:
+    """Run mechanism using coalition enumeration (2^N) to find the best self-consistent coalition.
+    Self-consistent means: transfers from THAT coalition justify every member's join decision."""
+    if config is None:
+        config = EngineConfig()
+    df = normalise_actor_df(actor_df)
+    arr = arrays(df)
+    e, pop, weights, names = arr["e"], arr["pop"], arr["weights"], arr["names"]
+    ab, ac, at = arr["alpha_base"], arr["alpha_cov"], arr["alpha_trf"]
+    N = len(e)
+    ebar = config.ebar
+    tmax = config.t_max if config.t_cap is None else min(config.t_max, config.t_cap)
+    t_grid = np.round(np.linspace(config.t_min, tmax, config.t_steps), 4)
+
+    best_global: Optional[Dict] = None
+
+    for mask_int in range(1, 2**N):
+        members = [i for i in range(N) if mask_int & (1 << i)]
+        if len(members) < 2:
+            continue
+        has_c = any(e[i] > ebar for i in members)
+        has_b = any(e[i] <= ebar for i in members)
+        if not (has_c and has_b):
+            continue
+        coverage = float(sum(weights[i] for i in members))
+
+        for tplus in t_grid:
+            if tplus <= 0:
+                continue
+            # t- from THIS coalition only
+            j_excess = sum(max(0, e[i]-ebar)*pop[i] for i in members)
+            j_deficit = sum(max(0, ebar-e[i])*pop[i] for i in members)
+            if j_deficit < 1e-12:
+                continue
+            tminus = float(tplus * j_excess / j_deficit)
+            # Compute all actors' willingness
+            tau = np.where(e > ebar, -tplus*(e-ebar), tminus*(ebar-e))
+            prefs = np.maximum(0, ab + ac*coverage + at*tau)
+            # Price = min willingness among members
+            member_prefs = [float(prefs[i]) for i in members]
+            price = min(member_prefs)
+            if price <= 0:
+                continue
+            # Self-consistency: all members willing, all non-members not
+            non_members = [i for i in range(N) if i not in members]
+            all_in = all(prefs[i] >= price - 0.01 for i in members)
+            all_out = all(prefs[i] < price + 0.01 for i in non_members)
+            if not (all_in and all_out):
+                continue
+            obj = coverage * price
+            if best_global is None or obj > best_global["obj"]:
+                best_global = {
+                    "obj": obj, "tplus": float(tplus), "tminus": tminus,
+                    "c": coverage, "p": price, "members": members,
+                    "prefs": prefs.copy(),
+                }
+
+    if best_global is None:
+        # Fallback to ex-ante version
+        return run_mechanism(actor_df, config)
+
+    bg = best_global
+    join = np.zeros(N, dtype=bool)
+    for i in bg["members"]:
+        join[i] = True
+    actual_coverage = float(weights[join].sum())
+    accounting = transfer_accounting(df, bg["p"], bg["tplus"], bg["tminus"], ebar=ebar, join_flags=join)
+
+    # Build curves at selected T+
+    c_grid = np.round(np.linspace(config.c_min, config.c_max, max(config.c_steps, 60)), 4)
+    curve_rows = []
+    for c in c_grid:
+        prefs_c = preference_values(e, ab, ac, at, float(c), bg["tplus"], bg["tminus"], ebar=ebar)
+        price_c = price_for_coverage(prefs_c, weights, float(c))
+        curve_rows.append({"coverage": float(c), "feasible_price": float(price_c), "objective": float(c)*float(price_c)})
+    curve_df = pd.DataFrame(curve_rows)
+
+    # Frontier by T+ (reuse ex-ante grid search for the frontier display)
+    frontier = []
+    for tplus in t_grid:
+        tm = solve_tminus(e, pop, float(tplus), ebar=ebar)
+        best_obj_t = -1
+        best_c_t, best_p_t = 0, 0
+        for c in c_grid:
+            prefs_c = preference_values(e, ab, ac, at, float(c), float(tplus), tm, ebar=ebar)
+            pc = price_for_coverage(prefs_c, weights, float(c))
+            ot = float(c) * pc
+            if ot > best_obj_t:
+                best_obj_t, best_c_t, best_p_t = ot, float(c), pc
+        frontier.append({"Tplus": float(tplus), "Tminus_expected": tm, "c": best_c_t, "p": best_p_t, "objective": best_obj_t})
+
+    actor_results = df.copy()
+    actor_results["preference_at_solution"] = bg["prefs"]
+    actor_results["joins"] = join
+    actor_results["join_status"] = np.where(join, "Joiner", "Non-joiner")
+
+    return {
+        "p_star": bg["p"], "c_star": bg["c"], "Tplus_star": bg["tplus"],
+        "Tminus_expected": bg["tminus"], "Tminus_actual": bg["tminus"],
+        "objective": bg["obj"], "actual_coverage": actual_coverage,
+        "actor_results": actor_results, "accounting": accounting, "curve": curve_df,
+        "frontier_by_Tplus": pd.DataFrame(frontier), "preferences": bg["prefs"],
+        "join_flags": join, "config": config,
+        "self_consistent": True,
+    }
+
+
 def run_mechanism(actor_df: pd.DataFrame, config: Optional[EngineConfig] = None,
                   params: Optional[Dict[str, np.ndarray]] = None) -> Dict[str, Any]:
     if config is None:

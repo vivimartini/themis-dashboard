@@ -8,7 +8,7 @@ import plotly.express as px, plotly.graph_objects as go
 import streamlit as st
 
 from themis_engine import (
-    EngineConfig, EBAR_DEFAULT, normalise_actor_df, run_mechanism,
+    EngineConfig, EBAR_DEFAULT, normalise_actor_df, run_mechanism, run_mechanism_selfconsistent,
     diagnostics, run_monte_carlo, split_country_from_group,
     preference_values, price_for_coverage, solve_tminus, arrays,
 )
@@ -66,7 +66,7 @@ def reset():
 mc_df, join_probs = precompute_mc(500)
 config = EngineConfig(ebar=EBAR_DEFAULT, c_steps=100, t_steps=101)
 actors = normalise_actor_df(st.session_state.actors)
-res = run_mechanism(actors, config=config)
+res = run_mechanism_selfconsistent(actors, config=config)
 acct = res["accounting"]
 ar = res["actor_results"]
 
@@ -106,10 +106,12 @@ if page == "🤝 The Coalition":
               help=f"90% MC range: €{mc_df['p_star'].quantile(0.1):.0f}–{mc_df['p_star'].quantile(0.9):.0f}")
     c2.metric("Coverage", f"{res['actual_coverage']:.0%}",
               help=f"90% MC range: {mc_df['actual_coverage'].quantile(0.1):.0%}–{mc_df['actual_coverage'].quantile(0.9):.0%}")
-    c3.metric("T+ (contributors)", f"{res['Tplus_star']:.2f}",
-              help="Contributor transfer rate, optimised by mechanism alongside p and c")
-    c4.metric("T− (beneficiaries)", f"{res['Tminus_actual']:.2f}",
-              help="Solved endogenously so the international pool balances exactly")
+    tplus_eur = res['Tplus_star'] * res['p_star']
+    tminus_eur = res['Tminus_actual'] * res['p_star']
+    c3.metric("t+ (contributors)", f"€{tplus_eur:.1f}/tCO₂e",
+              help=f"T+ = {res['Tplus_star']:.2f} of price. Contributors pay €{tplus_eur:.1f} per tonne above world average.")
+    c4.metric("t− (beneficiaries)", f"€{tminus_eur:.1f}/tCO₂e",
+              help=f"T− = {res['Tminus_actual']:.2f} of price. Beneficiaries receive €{tminus_eur:.1f} per tonne below world average.")
     sent = acct["total_sent_mEUR"].sum()
     c5.metric("Annual pool", f"€{sent/1000:,.0f}bn",
               help="Total international transfers per year")
